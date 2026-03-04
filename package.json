@@ -1,0 +1,17 @@
+{
+  "name": "summa-publica",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node backend/server.mjs",
+    "dev": "node --watch backend/server.mjs",
+    "check": "node --check backend/server.mjs && node --check backend/db.mjs && node --check backend/auth.mjs && node --check backend/gemini.mjs && node --check backend/publishers.mjs && node --check backend/quotes.mjs && node --check backend/meta-oauth.mjs && node --check backend/secret-crypto.mjs && node --check backend/migrate-orgs.mjs && node --check backend/selftest-tenancy.mjs && node --check backend/selftest-rate-limit.mjs && node --check backend/selftest-integrations.mjs && node --check web/app.js",
+    "migrate:orgs": "node backend/migrate-orgs.mjs",
+    "test:tenancy": "DATA_STORE=local node backend/selftest-tenancy.mjs",
+    "test:rate-limit": "DATA_STORE=local node backend/selftest-rate-limit.mjs",
+    "test:integrations": "DATA_STORE=local node backend/selftest-integrations.mjs",
+    "bootstrap:envs": "bash deploy/bootstrap-environments.sh",
+    "deploy:all": "bash deploy/deploy-all-environments.sh"
+  }
+}

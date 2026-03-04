@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Summa Publica · Publicacions</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+
+    <main class="app-shell">
+      <section id="loginSection" class="card login-card">
+        <h1>Summa Publica</h1>
+        <p class="muted">Portal multi-entitat de publicacions.</p>
+        <form id="loginForm" class="stack">
+          <label>
+            Email
+            <input id="loginEmail" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            Contrasenya
+            <input id="loginPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Entrar</button>
+        </form>
+        <p id="loginError" class="error"></p>
+
+        <hr class="login-separator" />
+
+        <form id="signupForm" class="stack">
+          <h3 class="form-title">Crear nova entitat</h3>
+          <label>
+            Nom de l'entitat
+            <input id="signupOrgName" type="text" autocomplete="organization" required />
+          </label>
+          <label>
+            Email owner
+            <input id="signupEmail" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            Contrasenya owner
+            <input id="signupPassword" type="password" autocomplete="new-password" required />
+          </label>
+          <button type="submit" class="secondary">Crear entitat</button>
+        </form>
+        <p id="signupError" class="error"></p>
+      </section>
+
+      <section id="appSection" class="hidden">
+        <header class="topbar card">
+          <div>
+            <h2 id="topbarTitle">Summa Publica</h2>
+            <p id="topbarSubtitle" class="muted">Panell de comunicació i publicació</p>
+          </div>
+          <div class="topbar-actions">
+            <button id="refreshBtn" class="secondary">Actualitzar</button>
+            <button id="runPublishBtn" class="secondary">Executar cua ara</button>
+            <button id="logoutBtn" class="danger">Sortir</button>
+          </div>
+        </header>
+
+        <section class="card integrations-card">
+          <div class="row between center">
+            <h3>Connexions socials de l'entitat</h3>
+            <button id="refreshIntegrationsBtn" type="button" class="secondary tiny">Refrescar connexions</button>
+          </div>
+          <p class="muted small">
+            Connecta Meta per publicar a Facebook i Instagram sense guardar contrasenyes a Summa Publica.
+          </p>
+          <div id="integrationsStatus" class="integration-status"></div>
+          <div class="row">
+            <button id="connectMetaBtn" type="button">Connectar Facebook + Instagram</button>
+            <button id="disconnectMetaBtn" type="button" class="secondary">Desconnectar Meta</button>
+          </div>
+          <p id="integrationsInfo" class="muted small"></p>
+          <p id="integrationsError" class="error"></p>
+        </section>
+
+        <section class="grid-two">
+          <article class="card">
+            <h3>1. Generar contingut (Gemini)</h3>
+            <form id="generateForm" class="stack">
+              <label>
+                Canal
+                <select id="channelInput" required></select>
+              </label>
+              <label>
+                Tema
+                <textarea id="topicInput" rows="4" placeholder="Exemple: campanya de suport a comunitats indígenes" required></textarea>
+              </label>
+              <button type="submit">Generar proposta</button>
+            </form>
+            <p id="generateInfo" class="muted small"></p>
+            <p id="generateError" class="error"></p>
+          </article>
+
+          <article class="card">
+            <h3>2. Editar i guardar esborrany</h3>
+            <form id="saveDraftForm" class="stack">
+              <label>
+                Contingut
+                <textarea id="contentInput" rows="8" placeholder='Si hi ha cita literal, escriu-la exacta entre cometes. La referència d\'obra s\'afegirà automàticament abans dels hashtags.'></textarea>
+              </label>
+              <label>
+                Programar (opcional, hora local)
+                <input id="scheduledAtInput" type="datetime-local" />
+              </label>
+              <label>
+                Pujar imatge (pots pujar-ne diverses)
+                <input id="mediaFileInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+              </label>
+              <div class="row center">
+                <button id="uploadMediaBtn" class="secondary" type="button">Pujar imatge</button>
+                <span id="uploadMediaInfo" class="muted small"></span>
+              </div>
+              <label>
+                Afegir imatge per URL (opcional)
+                <input id="mediaUrlInput" type="url" placeholder="https://... o /uploads/..." />
+              </label>
+              <div class="row center">
+                <button id="addMediaUrlBtn" class="secondary" type="button">Afegir URL</button>
+              </div>
+              <div id="mediaList" class="media-list"></div>
+              <button type="submit">Desar (esborrany o programat)</button>
+            </form>
+            <p id="saveError" class="error"></p>
+          </article>
+        </section>
+
+        <section class="card">
+          <div class="row between center">
+            <h3>3. Aprovació i programació</h3>
+            <div class="row">
+              <label class="inline">
+                Filtre
+                <select id="statusFilter">
+                  <option value="all">Tots</option>
+                  <option value="draft">Esborrany</option>
+                  <option value="scheduled">Programat</option>
+                  <option value="publishing">En publicació</option>
+                  <option value="published">Publicat</option>
+                  <option value="failed">Error</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div id="stats" class="stats"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Canal</th>
+                  <th>Tema</th>
+                  <th>Estat</th>
+                  <th>Programat</th>
+                  <th>Actualitzat</th>
+                  <th>Accions</th>
+                </tr>
+              </thead>
+              <tbody id="postsBody"></tbody>
+            </table>
+          </div>
+          <p id="postsError" class="error"></p>
+        </section>
+
+        <section class="card">
+          <div class="row between center">
+            <h3>4. Vista calendari</h3>
+            <div class="row">
+              <button id="calendarPrevBtn" type="button" class="secondary tiny">Mes anterior</button>
+              <button id="calendarTodayBtn" type="button" class="secondary tiny">Avui</button>
+              <button id="calendarNextBtn" type="button" class="secondary tiny">Mes següent</button>
+            </div>
+          </div>
+          <p id="calendarTitle" class="muted small"></p>
+          <div id="calendarGrid" class="calendar-grid"></div>
+          <div id="calendarDayList" class="calendar-day-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <div id="editModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+      <div class="modal-card">
+        <div class="row between center">
+          <h3 id="editModalTitle">Editar publicació</h3>
+          <button id="editCancelBtn" type="button" class="secondary tiny">Tancar</button>
+        </div>
+        <form id="editPostForm" class="stack">
+          <input id="editPostId" type="hidden" />
+          <label>
+            Canal
+            <select id="editChannelInput" required></select>
+          </label>
+          <label>
+            Tema
+            <input id="editTopicInput" type="text" required />
+          </label>
+          <label>
+            Contingut
+            <textarea id="editContentInput" rows="8" required></textarea>
+          </label>
+          <label>
+            Programació (hora local)
+            <input id="editScheduledAtInput" type="datetime-local" />
+          </label>
+          <label>
+            URL de la imatge (opcional)
+            <input id="editMediaUrlInput" type="url" placeholder="https://... o /uploads/..." />
+          </label>
+          <div class="row center">
+            <button id="editAddMediaUrlBtn" type="button" class="secondary">Afegir URL</button>
+          </div>
+          <label>
+            Pujar una imatge nova
+            <input id="editMediaFileInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+          </label>
+          <div class="row center">
+            <button id="editUploadMediaBtn" type="button" class="secondary">Pujar imatge</button>
+            <span id="editUploadMediaInfo" class="muted small"></span>
+          </div>
+          <div id="editMediaList" class="media-list"></div>
+          <div class="row">
+            <button type="submit">Desar canvis</button>
+            <button id="editDeleteScheduleBtn" type="button" class="secondary">Treure programació</button>
+          </div>
+        </form>
+        <p id="editInfo" class="muted small"></p>
+        <p id="editError" class="error"></p>
+      </div>
+    </div>
+
+    <div id="scheduleModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
+      <div class="modal-card modal-small">
+        <div class="row between center">
+          <h3 id="scheduleModalTitle">Programar publicació</h3>
+          <button id="scheduleCancelBtn" type="button" class="secondary tiny">Tancar</button>
+        </div>
+        <form id="scheduleForm" class="stack">
+          <input id="schedulePostId" type="hidden" />
+          <label>
+            Quan vols publicar?
+            <input id="scheduleAtInput" type="datetime-local" required />
+          </label>
+          <div class="row">
+            <button id="scheduleIn1hBtn" type="button" class="secondary tiny">D'aquí 1 hora</button>
+            <button id="scheduleTomorrowBtn" type="button" class="secondary tiny">Demà a les 09:00</button>
+          </div>
+          <button type="submit">Confirmar programació</button>
+        </form>
+        <p id="scheduleError" class="error"></p>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

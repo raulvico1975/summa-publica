@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function membershipDocId(orgId) {
+      return request.auth.uid + '_' + orgId;
+    }
+
+    function isOrgMember(orgId) {
+      return signedIn() && exists(/databases/$(database)/documents/summa_publica_memberships/$(membershipDocId(orgId)));
+    }
+
+    match /summa_publica_posts/{postId} {
+      allow read: if signedIn() && isOrgMember(resource.data.orgId);
+      allow create: if signedIn()
+        && request.resource.data.orgId is string
+        && isOrgMember(request.resource.data.orgId);
+      allow update, delete: if signedIn()
+        && isOrgMember(resource.data.orgId)
+        && request.resource.data.orgId == resource.data.orgId;
+    }
+
+    match /summa_publica_audit/{auditId} {
+      allow read: if signedIn() && isOrgMember(resource.data.orgId);
+      allow create: if signedIn()
+        && request.resource.data.orgId is string
+        && isOrgMember(request.resource.data.orgId);
+      allow update, delete: if false;
+    }
+
+    match /summa_publica_orgs/{orgId} {
+      allow read: if isOrgMember(orgId);
+      allow write: if false;
+    }
+
+    match /summa_publica_memberships/{membershipId} {
+      allow read: if signedIn() && membershipId.matches('^' + request.auth.uid + '_.+$');
+      allow write: if false;
+    }
+
+    match /summa_publica_users/{uid} {
+      allow read: if signedIn() && uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /summa_publica_meta/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /summa_publica_rate_limits/{docId} {
+      allow read, write: if false;
+    }
+
+    match /summa_publica_social_integrations/{docId} {
+      allow read, write: if false;
+    }
+
+    match /summa_publica_oauth_states/{docId} {
+      allow read, write: if false;
+    }
+  }
+}

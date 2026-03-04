@@ -1,0 +1,651 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Menu, X, Home, PenTool, Calendar, Settings, LogOut, 
+  Share2, MessageCircle, Send, Clock, CheckCircle, AlertCircle, RefreshCw, Edit3, Trash2, Smartphone
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken, signOut
+} from 'firebase/auth';
+import { 
+  getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc 
+} from 'firebase/firestore';
+
+// --- CONFIGURACIÓN DE FIREBASE ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'fpc-social-app';
+
+// --- CONFIGURACIÓN DE GEMINI API ---
+const apiKey = ""; // La clave se inyecta automáticamente en el entorno de ejecución
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, generate, schedule, settings
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // Estado de Datos (Firestore)
+  const [posts, setPosts] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Inicialización de Autenticación
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Error de autenticación:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Carga de Datos desde Firestore (Reglas estrictas aplicadas)
+  useEffect(() => {
+    if (!user) return;
+    
+    setLoadingData(true);
+    // Usamos public/data para que si hay varios CMs de la fundación, compartan el panel
+    const postsRef = collection(db, 'artifacts', appId, 'public', 'data', 'fpc_social_posts');
+    
+    const unsubscribe = onSnapshot(postsRef, 
+      (snapshot) => {
+        const postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Ordenamos en memoria (regla estricta: sin queries complejas de firestore)
+        postsData.sort((a, b) => b.createdAt - a.createdAt);
+        setPosts(postsData);
+        setLoadingData(false);
+      },
+      (error) => {
+        console.error("Error cargando publicaciones:", error);
+        setLoadingData(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleLogout = () => {
+    signOut(auth);
+  };
+
+  if (loadingAuth) {
+    return <div className="min-h-screen flex items-center justify-center bg-stone-50"><RefreshCw className="w-8 h-8 animate-spin text-emerald-600" /></div>;
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={() => signInAnonymously(auth)} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-100 flex font-sans text-stone-800">
+      {/* Sidebar */}
+      <aside className={`bg-stone-900 text-stone-100 w-64 flex-shrink-0 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed md:relative z-20 h-full`}>
+        <div className="p-4 flex items-center justify-between border-b border-stone-800">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center font-bold text-white">
+              FPC
+            </div>
+            <span className="font-semibold truncate">Portal CM</span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-stone-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <nav className="p-4 space-y-2">
+          <SidebarItem icon={<Home/>} label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+          <SidebarItem icon={<PenTool/>} label="Generar Contenido" active={currentView === 'generate'} onClick={() => setCurrentView('generate')} />
+          <SidebarItem icon={<Calendar/>} label="Calendario & Aprobación" active={currentView === 'schedule'} onClick={() => setCurrentView('schedule')} />
+          <SidebarItem icon={<Settings/>} label="Configuración Redes" active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
+        </nav>
+
+        <div className="absolute bottom-0 w-full p-4 border-t border-stone-800">
+          <button onClick={handleLogout} className="flex items-center space-x-3 text-stone-400 hover:text-white transition-colors w-full p-2 rounded-lg hover:bg-stone-800">
+            <LogOut className="w-5 h-5" />
+            <span>Cerrar Sesión</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* Topbar */}
+        <header className="bg-white shadow-sm h-16 flex items-center justify-between px-4 z-10 flex-shrink-0">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-stone-500 hover:text-stone-700 md:hidden">
+            <Menu className="w-6 h-6" />
+          </button>
+          <div className="flex-1 flex justify-center md:justify-start">
+            <h1 className="text-xl font-bold text-emerald-800 hidden md:block">Fundació Pere Casaldàliga</h1>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-sm font-medium text-stone-600">Community Manager</span>
+            <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white font-bold">
+              CM
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          {currentView === 'dashboard' && <DashboardView posts={posts} onNavigate={setCurrentView} />}
+          {currentView === 'generate' && <GenerateView db={db} appId={appId} onNavigate={setCurrentView} />}
+          {currentView === 'schedule' && <ScheduleView posts={posts} db={db} appId={appId} />}
+          {currentView === 'settings' && <SettingsView />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// --- COMPONENTES SECUNDARIOS ---
+
+function SidebarItem({ icon, label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center space-x-3 w-full p-3 rounded-lg transition-colors ${
+        active ? 'bg-emerald-700 text-white' : 'text-stone-400 hover:bg-stone-800 hover:text-stone-200'
+      }`}
+    >
+      {React.cloneElement(icon, { className: 'w-5 h-5' })}
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+function LoginScreen({ onLogin }) {
+  return (
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border-t-4 border-emerald-600">
+        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Share2 className="w-10 h-10 text-emerald-700" />
+        </div>
+        <h1 className="text-2xl font-bold text-stone-800 mb-2">Fundació Pere Casaldàliga</h1>
+        <p className="text-stone-500 mb-8">Gestor Inteligente de Redes Sociales y Difusión</p>
+        
+        <button 
+          onClick={onLogin}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+        >
+          <span>Acceso Privado CM</span>
+        </button>
+        <p className="mt-6 text-xs text-stone-400">Sistema protegido. Solo personal autorizado.</p>
+      </div>
+    </div>
+  );
+}
+
+// --- VISTAS PRINCIPALES ---
+
+function DashboardView({ posts, onNavigate }) {
+  const pendingCount = posts.filter(p => p.status === 'pending').length;
+  const approvedCount = posts.filter(p => p.status === 'approved').length;
+  const publishedCount = posts.filter(p => p.status === 'published').length;
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      <h2 className="text-2xl font-bold text-stone-800 mb-6">Resumen de Actividad</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard title="Borradores / Pendientes" count={pendingCount} icon={<Edit3 />} color="amber" onClick={() => onNavigate('schedule')} />
+        <StatCard title="Aprobados (Programados)" count={approvedCount} icon={<Clock />} color="emerald" onClick={() => onNavigate('schedule')} />
+        <StatCard title="Publicados" count={publishedCount} icon={<CheckCircle />} color="blue" onClick={() => onNavigate('schedule')} />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6 mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold text-stone-800">Acciones Rápidas</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button 
+            onClick={() => onNavigate('generate')}
+            className="flex items-center p-4 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors border border-emerald-100 text-left"
+          >
+            <div className="bg-emerald-200 p-3 rounded-full mr-4 text-emerald-700"><PenTool className="w-6 h-6" /></div>
+            <div>
+              <h4 className="font-bold text-emerald-900">Crear Nueva Publicación</h4>
+              <p className="text-sm text-emerald-700">Usa la IA para redactar contenido adaptado a redes o WhatsApp.</p>
+            </div>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate('schedule')}
+            className="flex items-center p-4 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors border border-amber-100 text-left"
+          >
+            <div className="bg-amber-200 p-3 rounded-full mr-4 text-amber-700"><CheckCircle className="w-6 h-6" /></div>
+            <div>
+              <h4 className="font-bold text-amber-900">Aprobar Contenidos</h4>
+              <p className="text-sm text-amber-700">Revisa los borradores generados y prográmalos para publicar.</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, count, icon, color, onClick }) {
+  const colorMap = {
+    amber: 'bg-amber-100 text-amber-600',
+    emerald: 'bg-emerald-100 text-emerald-600',
+    blue: 'bg-blue-100 text-blue-600'
+  };
+
+  return (
+    <div 
+      onClick={onClick}
+      className="bg-white p-6 rounded-xl shadow-sm border border-stone-200 cursor-pointer hover:shadow-md transition-shadow flex items-center space-x-4"
+    >
+      <div className={`p-4 rounded-full ${colorMap[color]}`}>
+        {React.cloneElement(icon, { className: 'w-6 h-6' })}
+      </div>
+      <div>
+        <p className="text-sm text-stone-500 font-medium">{title}</p>
+        <p className="text-3xl font-bold text-stone-800">{count}</p>
+      </div>
+    </div>
+  );
+}
+
+function GenerateView({ db, appId, onNavigate }) {
+  const [topic, setTopic] = useState('');
+  const [platform, setPlatform] = useState('instagram_facebook');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedContent, setGeneratedContent] = useState('');
+  const [editedContent, setEditedContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleGenerate = async () => {
+    if (!topic.trim()) return;
+    setIsGenerating(true);
+    setErrorMsg('');
+    setGeneratedContent('');
+    setEditedContent('');
+
+    const systemPrompt = `
+      Eres el Community Manager de la "Fundació Pere Casaldàliga". 
+      Tus valores centrales son: la solidaridad, la defensa de los derechos humanos, el apoyo a las comunidades indígenas, el cuidado de la Amazonía, la ecología integral y mantener vivo el legado, las causas y las palabras del obispo Pedro Casaldáliga (liberación, esperanza, justicia social).
+      Tu tono es: inspirador, cercano, reflexivo, comprometido, pero también profesional y claro.
+      
+      Instrucciones:
+      Escribe un texto persuasivo y adecuado sobre el tema proporcionado por el usuario.
+      Plataforma objetivo: ${platform === 'whatsapp' ? 'Lista de Difusión de WhatsApp. Debe ser un texto más personal, con uso de negritas de whatsapp (*texto*), emojis bien colocados, espaciado que facilite la lectura en móvil, y una llamada a la acción clara para compartir.' : 'Redes Sociales (Instagram/Facebook/X). Debe ser atractivo, visual, usar hashtags relevantes al final (#PereCasaldàliga #Solidaridad #Amazonía, etc.), y fomentar la interacción.'}
+      
+      IMPORTANTE: Devuelve SOLO el texto de la publicación, sin comentarios adicionales ni explicaciones.
+    `;
+
+    try {
+      const promptPayload = {
+        contents: [{ parts: [{ text: `Tema a tratar:\n${topic}` }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      };
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(promptPayload)
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+         throw new Error(data.error.message || "Error en la API de Gemini");
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "No se generó contenido.";
+      setGeneratedContent(text);
+      setEditedContent(text);
+
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Ocurrió un error al generar el contenido. Inténtalo de nuevo.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!editedContent.trim()) return;
+    setIsSaving(true);
+    try {
+      const postsRef = collection(db, 'artifacts', appId, 'public', 'data', 'fpc_social_posts');
+      await addDoc(postsRef, {
+        originalTopic: topic,
+        platform: platform,
+        content: editedContent,
+        status: 'pending', // pending = borrador listo para aprobar
+        createdAt: Date.now(),
+        scheduledDate: null
+      });
+      // Reset and go to schedule
+      setTopic('');
+      setGeneratedContent('');
+      onNavigate('schedule');
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Error al guardar el borrador en la base de datos.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden">
+      <div className="bg-emerald-700 p-6 text-white">
+        <h2 className="text-2xl font-bold flex items-center"><PenTool className="mr-3"/> Asistente de Redacción IA</h2>
+        <p className="text-emerald-100 mt-2">Genera contenido alineado con los valores y la voz de la Fundación.</p>
+      </div>
+
+      <div className="p-6 md:p-8 space-y-6">
+        {/* Paso 1: Configuración */}
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">1. Selecciona el Canal de Difusión</label>
+          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+            <button
+              onClick={() => setPlatform('instagram_facebook')}
+              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                platform === 'instagram_facebook' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-stone-200 text-stone-500 hover:border-stone-300'
+              }`}
+            >
+              <Share2 className="w-5 h-5 mr-2" /> Redes (IG / FB / X)
+            </button>
+            <button
+              onClick={() => setPlatform('whatsapp')}
+              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                platform === 'whatsapp' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-stone-200 text-stone-500 hover:border-stone-300'
+              }`}
+            >
+              <Smartphone className="w-5 h-5 mr-2" /> WhatsApp (Lista)
+            </button>
+          </div>
+        </div>
+
+        {/* Paso 2: Prompt */}
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">2. ¿De qué quieres hablar?</label>
+          <textarea
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="Ej: Lanzamiento de la nueva campaña de apadrinamiento de escuelas en la Amazonía. Mencionar que es el momento de la solidaridad y recordar una frase de Pere sobre la esperanza."
+            className="w-full border border-stone-300 rounded-lg p-4 h-32 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-none"
+          ></textarea>
+        </div>
+
+        <button
+          onClick={handleGenerate}
+          disabled={!topic.trim() || isGenerating}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+        >
+          {isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin"/> Generando con Gemini...</> : 'Generar Propuesta'}
+        </button>
+
+        {errorMsg && (
+          <div className="p-4 bg-red-50 text-red-700 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+            <p>{errorMsg}</p>
+          </div>
+        )}
+
+        {/* Paso 3: Edición */}
+        {generatedContent && (
+          <div className="mt-8 pt-8 border-t border-stone-200 animate-fadeIn">
+            <label className="block text-sm font-bold text-stone-700 mb-2">3. Revisa y Edita el Contenido</label>
+            <p className="text-sm text-stone-500 mb-4">Puedes ajustar el texto manualmente antes de guardarlo para su aprobación.</p>
+            
+            <textarea
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className="w-full border border-stone-300 rounded-lg p-4 h-64 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-stone-800 font-medium"
+            ></textarea>
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={handleSaveDraft}
+                disabled={isSaving || !editedContent.trim()}
+                className="bg-stone-800 hover:bg-stone-900 text-white font-bold py-3 px-8 rounded-lg transition-colors flex items-center disabled:opacity-50"
+              >
+                {isSaving ? 'Guardando...' : <><CheckCircle className="w-5 h-5 mr-2"/> Guardar Borrador</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScheduleView({ posts, db, appId }) {
+  const [filter, setFilter] = useState('all'); // all, pending, approved, published
+
+  const filteredPosts = useMemo(() => {
+    if (filter === 'all') return posts;
+    return posts.filter(p => p.status === filter);
+  }, [posts, filter]);
+
+  const updatePostStatus = async (id, newStatus, extraData = {}) => {
+    try {
+      const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'fpc_social_posts', id);
+      await updateDoc(postRef, {
+        status: newStatus,
+        ...extraData
+      });
+    } catch (err) {
+      console.error("Error actualizando documento", err);
+      alert("Error al actualizar. Revisa la consola.");
+    }
+  };
+
+  const deletePost = async (id) => {
+    if(!window.confirm("¿Seguro que deseas eliminar esta publicación?")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'fpc_social_posts', id));
+    } catch (err) {
+      console.error("Error borrando", err);
+    }
+  };
+
+  // Función simulada para "publicar ahora"
+  const handlePublishNow = (id, platform, content) => {
+    if (platform === 'whatsapp') {
+      // Simular copiar al portapapeles y avisar
+      navigator.clipboard.writeText(content);
+      alert("Texto copiado al portapapeles. ¡Abre WhatsApp Web y pégalo en tu lista de difusión!");
+    } else {
+      alert("Simulando envío a API de Facebook/Instagram/X...\n¡Publicado con éxito!");
+    }
+    updatePostStatus(id, 'published', { publishedAt: Date.now() });
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-stone-800">Calendario y Aprobación</h2>
+          <p className="text-stone-500">Gestiona el flujo de las publicaciones de la Fundación.</p>
+        </div>
+        
+        <div className="flex bg-white rounded-lg shadow-sm border border-stone-200 p-1">
+          {['all', 'pending', 'approved', 'published'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                filter === f ? 'bg-emerald-100 text-emerald-800' : 'text-stone-500 hover:bg-stone-50'
+              }`}
+            >
+              {f === 'all' && 'Todos'}
+              {f === 'pending' && 'Borradores'}
+              {f === 'approved' && 'Aprobados'}
+              {f === 'published' && 'Histórico'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {filteredPosts.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-stone-200 border-dashed">
+            <Calendar className="w-12 h-12 text-stone-300 mx-auto mb-3" />
+            <p className="text-stone-500">No hay publicaciones en esta categoría.</p>
+          </div>
+        ) : (
+          filteredPosts.map(post => (
+            <PostCard 
+              key={post.id} 
+              post={post} 
+              onApprove={() => updatePostStatus(post.id, 'approved', { scheduledDate: Date.now() + 86400000 })} // Programa para mañana simulado
+              onPublish={() => handlePublishNow(post.id, post.platform, post.content)}
+              onDelete={() => deletePost(post.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PostCard({ post, onApprove, onPublish, onDelete }) {
+  const isPending = post.status === 'pending';
+  const isApproved = post.status === 'approved';
+  const isPublished = post.status === 'published';
+
+  const statusColors = {
+    pending: 'bg-amber-100 text-amber-800 border-amber-200',
+    approved: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    published: 'bg-blue-100 text-blue-800 border-blue-200'
+  };
+
+  const statusLabels = {
+    pending: 'Borrador / Pendiente',
+    approved: 'Aprobado / Programado',
+    published: 'Publicado'
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden flex flex-col md:flex-row">
+      {/* Indicador de Canal */}
+      <div className={`w-full md:w-32 flex flex-row md:flex-col items-center justify-center p-4 border-b md:border-b-0 md:border-r border-stone-100 ${post.platform === 'whatsapp' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+        {post.platform === 'whatsapp' ? <Smartphone className="w-8 h-8 mb-2" /> : <Share2 className="w-8 h-8 mb-2" />}
+        <span className="text-xs font-bold uppercase tracking-wider text-center">
+          {post.platform === 'whatsapp' ? 'WhatsApp' : 'Redes Soc.'}
+        </span>
+      </div>
+      
+      {/* Contenido */}
+      <div className="p-6 flex-1 flex flex-col">
+        <div className="flex justify-between items-start mb-4">
+          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusColors[post.status]}`}>
+            {statusLabels[post.status]}
+          </span>
+          <span className="text-xs text-stone-400">
+            Creado: {new Date(post.createdAt).toLocaleDateString('es-ES')}
+          </span>
+        </div>
+        
+        <div className="text-stone-800 whitespace-pre-wrap text-sm flex-1 font-medium bg-stone-50 p-4 rounded-lg border border-stone-100">
+          {post.content}
+        </div>
+
+        {/* Acciones */}
+        <div className="mt-4 pt-4 border-t border-stone-100 flex flex-wrap gap-2 justify-end">
+          <button onClick={onDelete} className="p-2 text-stone-400 hover:text-red-500 transition-colors" title="Eliminar">
+            <Trash2 className="w-5 h-5" />
+          </button>
+          
+          {isPending && (
+            <button 
+              onClick={onApprove}
+              className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-md transition-colors"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" /> Aprobar & Programar
+            </button>
+          )}
+
+          {isApproved && (
+            <button 
+              onClick={onPublish}
+              className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-md transition-colors"
+            >
+              <Send className="w-4 h-4 mr-2" /> 
+              {post.platform === 'whatsapp' ? 'Publicar (Copiar)' : 'Forzar Publicación Ahora'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <h2 className="text-2xl font-bold text-stone-800 mb-6">Configuración de Conexiones</h2>
+      
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start text-amber-800 text-sm mb-6">
+        <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />
+        <p>
+          <strong>Aviso sobre la publicación automática:</strong> Para que esta interfaz publique automáticamente 
+          en Meta (Facebook/Instagram/WhatsApp), se requiere configurar tokens de acceso reales y conectar esta 
+          aplicación a un servidor (Backend) autorizado por la API de Meta. Actualmente, esta vista es una 
+          simulación del panel de configuración.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden">
+        <div className="p-6 border-b border-stone-200 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Share2 /></div>
+            <div>
+              <h3 className="font-bold text-stone-800">Cuentas de Meta (Facebook / Instagram)</h3>
+              <p className="text-sm text-stone-500">Fundació Pere Casaldàliga Oficial</p>
+            </div>
+          </div>
+          <button className="px-4 py-2 bg-stone-100 text-stone-600 font-bold rounded-lg text-sm hover:bg-stone-200">
+            Desconectar
+          </button>
+        </div>
+
+        <div className="p-6 border-b border-stone-200 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <div className="bg-black p-3 rounded-full text-white"><X /></div>
+            <div>
+              <h3 className="font-bold text-stone-800">Cuenta de X (Twitter)</h3>
+              <p className="text-sm text-stone-500">@CasaldaligaFund</p>
+            </div>
+          </div>
+          <button className="px-4 py-2 bg-stone-100 text-stone-600 font-bold rounded-lg text-sm hover:bg-stone-200">
+            Conectar
+          </button>
+        </div>
+
+        <div className="p-6 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <div className="bg-green-100 p-3 rounded-full text-green-600"><MessageCircle /></div>
+            <div>
+              <h3 className="font-bold text-stone-800">WhatsApp Business API</h3>
+              <p className="text-sm text-stone-500">Para envíos masivos automáticos a la lista de difusión</p>
+            </div>
+          </div>
+          <button className="px-4 py-2 bg-stone-800 text-white font-bold rounded-lg text-sm hover:bg-stone-900">
+            Configurar Webhook
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
